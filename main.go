@@ -7,6 +7,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 )
@@ -171,6 +172,26 @@ func (c *CreatorForJSON) CreateReport(detailsOrder []string) []map[string]interf
 
 	return report
 }
+
+// ReportSlice представляет срез элементов отчета для сортировки.
+type ReportSlice []map[string]interface{}
+
+// Len возвращает длину среза.
+func (r ReportSlice) Len() int {
+	return len(r)
+}
+
+// Less определяет порядок сортировки по ID.
+func (r ReportSlice) Less(i, j int) bool {
+	return r[i]["Id"].(int) < r[j]["Id"].(int)
+}
+
+// Swap меняет местами элементы с указанными индексами.
+func (r ReportSlice) Swap(i, j int) {
+	r[i], r[j] = r[j], r[i]
+}
+
+
 
 // askDBcount - функция для выполнения запросов к базе данных для получения счетчика.
 func askDBcount() string {
@@ -358,11 +379,14 @@ func backStatistic(w http.ResponseWriter, r *http.Request) {
 
 	// Создание отчета и отправка его в виде JSON-ответа.
 	report := creator.CreateReport(detailsOrder)
-	reportJSON, err := json.MarshalIndent(report, "", "  ")
+	sortedReport := ReportSlice(report)
+    sort.Sort(sortedReport)
+	reportJSON, err := json.MarshalIndent(sortedReport, "", "  ")
 	if err != nil {
 		http.Error(w, "Error formatting JSON", http.StatusInternalServerError)
 		return
 	}
+	
 	ID = 1
 	w.Write(reportJSON)
 }
