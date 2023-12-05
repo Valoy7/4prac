@@ -49,11 +49,11 @@ func (pe *ParentElement) AddToReport(PID int, currStats map[string]string) int {
 		}
 	}
 	newElement := map[string]interface{}{
-		"Id":           len(pe.Report) + 1,
+		"Id":           len(pe.Report),
 		"Pid":          nil,
-		"URL":          currStats["URL"],
-		"SourceIP":     currStats["SourceIP"],
-		"TimeInterval": currStats["TimeInterval"],
+		"URL":          nil,
+		"SourceIP":     nil,
+		"TimeInterval": nil,
 		"Count":        1,
 	}
 	newElement[pe.Dimension] = myStat
@@ -86,11 +86,11 @@ func (ce *ChildrenElement) AddToReport(PID int, currStats map[string]string) int
 		}
 	}
 	newElement := map[string]interface{}{
-		"Id":           len(ce.Report) + 1,
+		"Id":           len(ce.Report),
 		"Pid":          PID,
-		"URL":          currStats["URL"],
-		"SourceIP":     currStats["SourceIP"],
-		"TimeInterval": currStats["TimeInterval"],
+		"URL":          nil,
+		"SourceIP":     nil,
+		"TimeInterval": nil,
 		"Count":        1,
 	}
 	newElement[ce.Dimension] = myStat
