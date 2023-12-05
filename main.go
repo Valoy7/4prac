@@ -12,7 +12,7 @@ import (
 )
 
 var count int
-
+var ID int = 1
 // ServerDisconnectedError описывает ошибку отключения сервера.
 type ServerDisconnectedError struct {
 	message string
@@ -28,85 +28,89 @@ type ReportElement interface {
 	AddToReport(PID int, currStats map[string]string) int
 	CreateReport(detailsOrder []string) []map[string]interface{}
 }
+
 // BaseElement represents a common structure for both ParentElement and ChildrenElement.
 type BaseElement struct {
 	Dimension string
 	Report    []map[string]interface{}
+	IdCounter int
 }
-
 // Init initializes the element before processing data from the database.
 func (be *BaseElement) Init() {
 	be.Report = nil
+	be.IdCounter = 1
 }
-
 func (be *BaseElement) AddToReport(PID int, currStats map[string]string) int {
-	
 	myStat := currStats[be.Dimension]
-	fmt.Println("Adding to report! ",myStat )
+	fmt.Println("Adding to report! ", myStat)
 	for _, i := range be.Report {
 		if val, ok := i[be.Dimension].(string); ok && val == myStat {
 			i["Count"] = i["Count"].(int) + 1
 			return i["Id"].(int)
 		}
 	}
+	fmt.Println("ID TUT TAKOE1: ",be.IdCounter)
 	newElement := map[string]interface{}{
-		"Id":           len(be.Report) + 1,
+		"Id":           ID,
 		"Pid":          nil,
 		"URL":          nil,
 		"SourceIP":     nil,
 		"TimeInterval": nil,
 		"Count":        1,
 	}
+	ID++
+	fmt.Println("ID TUT TAKOE3: ",be.IdCounter)
 	newElement[be.Dimension] = myStat
 	be.Report = append(be.Report, newElement)
 	return newElement["Id"].(int)
 }
 // CreateReport creates a report in JSON format.
 func (be *BaseElement) CreateReport(detailsOrder []string) []map[string]interface{} {
+	for _, i := range be.Report {
+		i["Id"] = i["Id"].(int)
+	}
 	return be.Report
 }
+
 // ParentElement представляет собой класс родительского элемента.
 type ParentElement struct {
 	BaseElement
 }
+
 func NewParentElement(dimension string) *ParentElement {
-	return &ParentElement{BaseElement: BaseElement{Dimension: dimension}}
+	return &ParentElement{BaseElement: BaseElement{Dimension: dimension, IdCounter: 1}}
 }
+
 type ChildrenElement struct {
 	BaseElement
-}
-// NewChildrenElement initializes a new instance of ChildrenElement.
-func NewChildrenElement(dimension string) *ChildrenElement {
-	return &ChildrenElement{BaseElement: BaseElement{Dimension: dimension}}
 }
 
 // AddToReport добавляет элемент в дочернюю часть отчета.
 func (ce *ChildrenElement) AddToReport(PID int, currStats map[string]string) int {
 	//fmt.Println("Мы в ce *ChildrenElement) AddToReport:")
 	myStat := currStats[ce.Dimension]
-	fmt.Println("Мы в ce *ChildrenElement) AddToReport ",myStat )
+	fmt.Println("Мы в ce *ChildrenElement) AddToReport ", myStat)
 	for _, i := range ce.Report {
 		if val, ok := i[ce.Dimension].(string); ok && val == myStat && i["Pid"].(int) == PID {
 			i["Count"] = i["Count"].(int) + 1
 			return i["Id"].(int)
 		}
 	}
+	
+	fmt.Println("ID TUT TAKOE2: ",ce.BaseElement.IdCounter)
 	newElement := map[string]interface{}{
-		"Id":           len(ce.Report)+1,
+		"Id":          ID,
 		"Pid":          PID,
 		"URL":          nil,
 		"SourceIP":     nil,
 		"TimeInterval": nil,
 		"Count":        1,
 	}
+	ID++
+	//ce.BaseElement.IdCounter = ce.BaseElement.IdCounter+1
 	newElement[ce.Dimension] = myStat
 	ce.Report = append(ce.Report, newElement)
 	return newElement["Id"].(int)
-}
-
-// CreateReport создает отчет в формате JSON.
-func (ce *ChildrenElement) CreateReport(detailsOrder []string) []map[string]interface{} {
-	return ce.Report
 }
 
 // CreatorForJSON представляет собой класс создателя отчетов в формате JSON.
@@ -129,6 +133,7 @@ func (c *CreatorForJSON) Init() {
 		element.Init()
 	}
 }
+
 // AddToReport adds an element to the report using the appropriate method.
 func (c *CreatorForJSON) AddToReport(PID int, currStats map[string]string) int {
 	fmt.Println("Adding to report")
@@ -166,7 +171,6 @@ func (c *CreatorForJSON) CreateReport(detailsOrder []string) []map[string]interf
 
 	return report
 }
-
 
 // askDBcount - функция для выполнения запросов к базе данных для получения счетчика.
 func askDBcount() string {
@@ -355,11 +359,12 @@ func backStatistic(w http.ResponseWriter, r *http.Request) {
 	// Создание отчета и отправка его в виде JSON-ответа.
 	report := creator.CreateReport(detailsOrder)
 	reportJSON, err := json.MarshalIndent(report, "", "  ")
-if err != nil {
-    http.Error(w, "Error formatting JSON", http.StatusInternalServerError)
-    return
-}
-w.Write(reportJSON)
+	if err != nil {
+		http.Error(w, "Error formatting JSON", http.StatusInternalServerError)
+		return
+	}
+	ID = 1
+	w.Write(reportJSON)
 }
 
 func main() {
