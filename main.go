@@ -11,6 +11,9 @@ import (
 	"strings"
 )
 
+var count int
+
+// ServerDisconnectedError описывает ошибку отключения сервера.
 type ServerDisconnectedError struct {
 	message string
 }
@@ -19,167 +22,228 @@ func (e *ServerDisconnectedError) Error() string {
 	return e.message
 }
 
-var count int
-
-// /////////////////4 ptakt
-type StatData struct {
-	ID           int     `json:"Id"`
-	PID          *int    `json:"Pid,omitempty"`
-	URL          *string `json:"URL,omitempty"`
-	SourceIP     *string `json:"SourceIP,omitempty"`
-	TimeInterval *string `json:"TimeInterval,omitempty"`
-	Count        int     `json:"Count"`
-}
-
+// ReportElement определяет интерфейс базового элемента отчета.
 type ReportElement interface {
-	addToReport(Pid int, currStats map[string]string) int
+	Init()
+	AddToReport(PID int, currStats map[string]string) int
+	CreateReport(detailsOrder []string) []map[string]interface{}
 }
 
+// ParentElement представляет собой класс родительского элемента.
 type ParentElement struct {
-	Id           int
-	Pid          interface{}
-	URL          interface{}
-	SourceIP     interface{}
-	TimeInterval interface{}
-	Count        int
-	deminsion    string
-	report       []ReportElement
+	Dimension string
+	Report    []map[string]interface{}
 }
-
-// addToReport добавляет статистический элемент в отчет (рекурсивно обрабатывает элементы дерева отчета).
-// Возвращает идентификатор нового или существующего элемента, который был добавлен в отчет.
-func (pe *ParentElement) addToReport(Pid int, currStats map[string]string) int {
-	// Извлекаем значение измерения текущего элемента
-	myStat := currStats[pe.deminsion]
-
-	// Итерируем по элементам отчета текущего уровня (родителя)
-	for _, i := range pe.report {
-		// Проверяем, является ли элемент типа *ParentElement и соответствует ли измерение
-		if val, ok := i.(*ParentElement); ok && val.deminsion == myStat {
-			// Увеличиваем счетчик и возвращаем идентификатор существующего элемента
-			val.Count++
-			return val.Id
+// Init инициализирует родительский элемент перед обработкой данных из базы данных.
+func (pe *ParentElement) Init() {
+	pe.Report = nil
+}
+// AddToReport добавляет элемент в родительскую часть отчета.
+func (pe *ParentElement) AddToReport(PID int, currStats map[string]string) int {
+	fmt.Println("Мы в ce ParentElement) AddToReport ")
+	myStat := currStats[pe.Dimension]
+	for _, i := range pe.Report {
+		if val, ok := i[pe.Dimension].(string); ok && val == myStat {
+			i["Count"] = i["Count"].(int) + 1
+			return i["Id"].(int)
 		}
 	}
-
-	// Создаем новый элемент отчета, так как элемент с заданным измерением не найден
-	newElement := &ParentElement{
-		Id:           len(pe.report),
-		Pid:          nil,    // Идентификатор родительского элемента (может потребоваться уточнение)
-		URL:          nil,    // Данные URL (добавьте реальные данные, если они есть)
-		SourceIP:     nil,    // Данные SourceIP (добавьте реальные данные, если они есть)
-		TimeInterval: nil,    // Данные TimeInterval (добавьте реальные данные, если они есть)
-		Count:        1,      // Устанавливаем начальное значение счетчика в 1
-		deminsion:    myStat, // Измерение текущего элемента
-		report:       nil,    // Инициализируйте его элементами отчета (возможно, потребуется уточнение)
+	newElement := map[string]interface{}{
+		"Id":           len(pe.Report) + 1,
+		"Pid":          nil,
+		"URL":          currStats["URL"],
+		"SourceIP":     currStats["SourceIP"],
+		"TimeInterval": currStats["TimeInterval"],
+		"Count":        1,
 	}
-
-	// Добавляем новый элемент к отчету текущего родительского элемента
-	pe.report = append(pe.report, newElement)
-
-	// Возвращаем идентификатор нового элемента
-	return newElement.Id
+	newElement[pe.Dimension] = myStat
+	pe.Report = append(pe.Report, newElement)
+	return newElement["Id"].(int)
 }
 
-// ChildrenElement - это элемент отчета, представляющий статистику с дополнительными измерениями.
+// CreateReport создает отчет в формате JSON.
+func (pe *ParentElement) CreateReport(detailsOrder []string) []map[string]interface{} {
+	return pe.Report
+}
+
+// ChildrenElement представляет собой класс дочернего элемента.
 type ChildrenElement struct {
-	Id           int             // Идентификатор элемента
-	Pid          interface{}     // Идентификатор родительского элемента
-	URL          interface{}     // Данные URL (добавьте реальные данные, если они есть)
-	SourceIP     interface{}     // Данные SourceIP (добавьте реальные данные, если они есть)
-	TimeInterval interface{}     // Данные TimeInterval (добавьте реальные данные, если они есть)
-	Count        int             // Счетчик элемента
-	deminsion    string          // Измерение текущего элемента
-	report       []ReportElement // Элементы отчета текущего элемента
+	Dimension string
+	Report    []map[string]interface{}
 }
-
-// // addToReport - это метод типа дочернего элемента, который добавляет новый элемент отчета или увеличивает количество
-// существующего элемента на основе предоставленного Pid (родительского идентификатора) и текущей статистики.
-// Он возвращает идентификатор добавленного или обновленного элемента отчета.
-func (ce *ChildrenElement) addToReport(Pid int, currStats map[string]string) int {
-	// Извлеките значение измерения для текущего ChildrenElement из предоставленной статистики
-	myStat := currStats[ce.deminsion]
-
-	// Выполните итерацию по существующим элементам отчета, чтобы найти соответствие на основе измерения, Pid и утверждения типа
-	for _, i := range ce.report {
-		if val, ok := i.(*ChildrenElement); ok && val.deminsion == myStat && val.Pid == Pid {
-			// If a match is found, increment the count and return the ID of the matched element
-			val.Count++
-			return val.Id
+// Init инициализирует дочерний элемент перед обработкой данных из базы данных.
+func (ce *ChildrenElement) Init() {
+	ce.Report = nil
+}
+// AddToReport добавляет элемент в дочернюю часть отчета.
+func (ce *ChildrenElement) AddToReport(PID int, currStats map[string]string) int {
+	fmt.Println("Мы в ce *ChildrenElement) AddToReport:")
+	myStat := currStats[ce.Dimension]
+	for _, i := range ce.Report {
+		if val, ok := i[ce.Dimension].(string); ok && val == myStat && i["Pid"].(int) == PID {
+			i["Count"] = i["Count"].(int) + 1
+			return i["Id"].(int)
 		}
 	}
-
-	// Если совпадение не найдено, создайте новый дочерний элемент и добавьте его в отчет
-	newElement := &ChildrenElement{
-		Id:           len(ce.report),
-		Pid:          Pid,
-		URL:          nil,
-		SourceIP:     nil,
-		TimeInterval: nil,
-		Count:        1,
-		deminsion:    myStat,
-		report:       nil, // You may need to initialize it depending on your use case
+	newElement := map[string]interface{}{
+		"Id":           len(ce.Report) + 1,
+		"Pid":          PID,
+		"URL":          currStats["URL"],
+		"SourceIP":     currStats["SourceIP"],
+		"TimeInterval": currStats["TimeInterval"],
+		"Count":        1,
 	}
-	ce.report = append(ce.report, newElement)
-
-	// Возвращает идентификатор вновь добавленного элемента
-	return newElement.Id
+	newElement[ce.Dimension] = myStat
+	ce.Report = append(ce.Report, newElement)
+	return newElement["Id"].(int)
 }
 
-type ReportCreator interface {
-	createReport() []StatData
+// CreateReport создает отчет в формате JSON.
+func (ce *ChildrenElement) CreateReport(detailsOrder []string) []map[string]interface{} {
+	return ce.Report
 }
 
+// CreatorForJSON представляет собой класс создателя отчетов в формате JSON.
 type CreatorForJSON struct {
-	report    []ReportElement
-	deminsion string
+	ReportElements []ReportElement
 }
 
-func (cfj *CreatorForJSON) createReport() []StatData {
-	// Инициализация пустого массива для хранения результирующей статистики
-	var result []StatData
+// NewCreatorForJSON инициализирует экземпляр CreatorForJSON.
+func NewCreatorForJSON(dimension string) *CreatorForJSON {
+	fmt.Println("Мы в NewCreatorForJSON:")
+	creator := &CreatorForJSON{
+		ReportElements: []ReportElement{&ParentElement{Dimension: dimension}},
+	}
+	creator.Init() // Вызываем Init для инициализации элементов
+	return creator
+}
+// Init инициализирует CreatorForJSON перед обработкой данных из базы данных.
+func (c *CreatorForJSON) Init() {
+	for _, element := range c.ReportElements {
+		element.Init()
+	}
+}
 
-	// Итерация по элементам в отчете (cfj.report)
-	for _, element := range cfj.report {
-		fmt.Println("ya zdesya")
-		fmt.Println(" eto element: ", element)
-		// Проверяем, является ли элемент типа *ParentElement
-		if val, ok := element.(*ParentElement); ok {
-			// Создаем новую структуру StatData, используя данные из *ParentElement
-			statData := StatData{
-				ID:           val.Id,
-				URL:          nil, //
-				SourceIP:     nil, //
-				TimeInterval: nil, //
-				Count:        val.Count,
-			}
-			// Добавляем созданную структуру в массив result
-			result = append(result, statData)
-		} else if val, ok := element.(*ChildrenElement); ok {
-			// Если элемент типа *ChildrenElement, то используем утверждение (assertion),
-			// чтобы получить значение Pid в нужном формате (int)
-			pid, ok := val.Pid.(int)
-			if !ok {
-				// Если утверждение не удалось, выводим ошибку и переходим к следующему элементу
-				fmt.Println("Error asserting Pid to int")
-				continue
-			}
-			// Создаем новую структуру StatData, используя данные из *ChildrenElement
-			statData := StatData{
-				ID:           val.Id,
-				PID:          &pid,
-				URL:          nil, //
-				SourceIP:     nil, //
-				TimeInterval: nil, //
-				Count:        val.Count,
-			}
-			// Добавляем созданную структуру в массив result
-			result = append(result, statData)
-		}
+// AddToReport добавляет элемент в отчет с использованием соответствующего метода.
+func (c *CreatorForJSON) AddToReport(PID int, currStats map[string]string) int {
+	fmt.Println("Мы в AddToReport:")
+	for _, element := range c.ReportElements {
+		PID = element.AddToReport(PID, currStats)
 	}
 
-	// Возвращаем сформированный массив структур StatData
-	return result
+	return PID
+}
+
+// CreateReport создает отчет в формате JSON.
+func (c *CreatorForJSON) CreateReport(detailsOrder []string) []map[string]interface{} {
+	fmt.Println("Мы в CreateReport:")
+	countStr := askDBcount()
+	count, err := strconv.Atoi(countStr)
+	if err != nil {
+		fmt.Println("Error converting counter to int:", err)
+		return nil
+	}
+
+	c.Init()
+
+	for i := 0; i <= count; i++ {
+		data := askDB(strconv.Itoa(i))
+		stats := map[string]string{"URL": data[0], "SourceIP": data[1], "TimeInterval": data[2]}
+		PID := -1
+		PID = c.AddToReport(PID, stats)
+		fmt.Println("pid у нас: ", PID)
+	}
+
+	// Предполагая, что первый элемент - это ParentElement
+	var report []map[string]interface{}
+	for _, element := range c.ReportElements {
+		report = append(report, element.CreateReport(detailsOrder)...)
+	}
+
+	return report
+}
+
+// askDBcount - функция для выполнения запросов к базе данных для получения счетчика.
+func askDBcount() string {
+	conn, err := net.Dial("tcp", "localhost:6379")
+	if err != nil {
+		handleConnectionError(err)
+		return ""
+	}
+	defer conn.Close()
+
+	reader := bufio.NewReader(conn)
+	writer := bufio.NewWriter(conn)
+
+	_, err = writer.WriteString("HGETSC" + "\n")
+	if err != nil {
+		handleWriteError(err)
+		return ""
+	}
+	writer.Flush()
+
+	counterStr, err := reader.ReadString('\n')
+	if err != nil {
+		handleReadError(err)
+		return ""
+	}
+	counterStr = strings.TrimSuffix(counterStr, "\n")
+
+	if counterStr == "" {
+		fmt.Println("Empty counter string received")
+		return ""
+	}
+	return counterStr
+}
+
+// askDB - функция для выполнения запросов к базе данных.
+func askDB(istr string) []string {
+	conn, err := net.Dial("tcp", "localhost:6379")
+	if err != nil {
+		handleConnectionError(err)
+		return nil
+	}
+	defer conn.Close()
+
+	reader := bufio.NewReader(conn)
+	writer := bufio.NewWriter(conn)
+
+	_, err = writer.WriteString("HGETS " + istr + "\n")
+	if err != nil {
+		handleWriteError(err)
+		return nil
+	}
+	writer.Flush()
+
+	dimensions, err := reader.ReadString('\n')
+	if err != nil {
+		handleReadError(err)
+		return nil
+	}
+
+	dimensions = strings.TrimSpace(dimensions)
+
+	// Разделение измерений по пробелу
+	dimensionsList := strings.Split(dimensions, " ")
+
+	return dimensionsList
+}
+
+func handleConnectionError(err error) {
+	if strings.Contains(err.Error(), "dial tcp [::1]:6379: connectex: No connection could be made because the target machine actively refused it.") {
+		err = &ServerDisconnectedError{"Server disconnected, try again later!"}
+		fmt.Println("Server disconnected, try again later!")
+	} else {
+		fmt.Println("Error connecting:", err)
+	}
+}
+
+func handleWriteError(err error) {
+	fmt.Println("Error writing to server:", err)
+}
+
+func handleReadError(err error) {
+	fmt.Println("Error reading from server:", err)
 }
 
 func handlePostRequest(w http.ResponseWriter, r *http.Request) {
@@ -188,26 +252,23 @@ func handlePostRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Читаем данные из тела запроса
+	// Чтение данных из тела запроса
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		http.Error(w, "Error reading request body", http.StatusInternalServerError)
 		return
 	}
+
 	countStr := strconv.Itoa(count)
 	if count == 0 {
-
 		dimensions := strings.Join([]string{countStr, string(body)}, " ")
-		// отправляем пост запрос на БД для заполнения таблицы
 		resp, err := http.Post("http://localhost:8082/post", "text/plain", strings.NewReader(dimensions))
 		if err != nil {
 			fmt.Println("Error sending POST request to the second server:", err)
 			return
 		}
-		// увеличиваем каунт. Каунт для удобной ориентации в ХТ.
 		count++
 		defer resp.Body.Close()
-
 	} else {
 		dimensions := strings.Join([]string{countStr, string(body)}, " ")
 		resp, err := http.Post("http://localhost:8082/post", "text/plain", strings.NewReader(dimensions))
@@ -217,140 +278,89 @@ func handlePostRequest(w http.ResponseWriter, r *http.Request) {
 		}
 		count++
 		defer resp.Body.Close()
-
 	}
-	// Выводим полученные данные
+
+	// Вывод полученных данных
 	fmt.Println("Received data:", string(body))
 
-	// Отправляем успешный ответ
+	// Отправка успешного ответа
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("POST request received successfully"))
 }
 
-func handleReport(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
+// backStatistic обрабатывает HTTP-запрос и создает статистический отчет на основе полученных данных.
+func backStatistic(w http.ResponseWriter, r *http.Request) {
+	// Выводит в консоль сообщение для отладки, указывающее, что функция была вызвана.
 	fmt.Println("ya tut")
-	////////////////////////
-	conn, err := net.Dial("tcp", "localhost:6379")
+
+	// Создание декодера JSON для чтения данных из тела запроса.
+	decoder := json.NewDecoder(r.Body)
+	var data map[string]interface{}
+	err := decoder.Decode(&data)
 	if err != nil {
-		// Ошибка при подключении. Проверяем, является ли ошибка "connection refused".
-		// Если да, считаем, что сервер отключен и возвращаем нашу ошибку
-		if strings.Contains(err.Error(), "dial tcp [::1]:6379: connectex: No connection could be made because the target machine actively refused it.") {
-			err = &ServerDisconnectedError{"Сервер отключен, попробуйте позже!"}
-			fmt.Println("Сервер отключен, попробуйте позже!")
+		// В случае ошибки при декодировании JSON, отправляет HTTP-ответ с кодом ошибки и сообщением.
+		http.Error(w, "Invalid JSON format", http.StatusBadRequest)
+		return
+	}
+
+	// Проверка наличия ключа "Dimensions" в данных и его приведение к массиву интерфейсов.
+	dimensionsArray, ok := data["Dimensions"].([]interface{})
+	if !ok {
+		// Если ключ "Dimensions" отсутствует или имеет неверный формат, отправляет HTTP-ответ с ошибкой.
+		http.Error(w, "Invalid Dimensions format", http.StatusBadRequest)
+		return
+	}
+
+	// Создание среза строк для хранения измерений.
+	dimensions := make([]string, len(dimensionsArray))
+	for i, v := range dimensionsArray {
+		// Приведение каждого измерения к строковому типу.
+		s, ok := v.(string)
+		if !ok {
+			// Если приведение не удалось, отправляет HTTP-ответ с ошибкой.
+			http.Error(w, "Invalid Dimension format", http.StatusBadRequest)
 			return
 		}
-		// Другая ошибка - выводим ее и завершаем работу
-		fmt.Println("Error connecting:", err)
-		return
-	}
-	defer conn.Close() // Всегда закрываем соединение в конце работы функции
-	reader := bufio.NewReader(conn)
-	writer := bufio.NewWriter(conn)
-
-	_, err = writer.WriteString("HGETSC" + "\n")
-	if err != nil {
-		fmt.Println("Error writing to server:", err)
-		return
-	}
-	writer.Flush()
-	counterStr, err := reader.ReadString('\n')
-	if err != nil {
-		fmt.Println("Error reading counter:", err)
-		return
+		// Запись измерения в срез dimensions.
+		dimensions[i] = s
+		fmt.Println("dimensions[i] = s: ", dimensions[i]) // Выводит в консоль текущее измерение для отладки.
 	}
 
-	counterStr = strings.TrimSuffix(counterStr, "\n")
+	// Создание первого элемента отчета с использованием NewCreatorForJSON.
+	creator := NewCreatorForJSON(dimensions[0])
 
-	if counterStr == "" {
-		fmt.Println("Empty counter string received")
-		return
+	// Создание дочерних элементов для оставшихся измерений.
+	//var currentElement ReportElement = creator
+	for _, dim := range dimensions[1:] {
+		child := &ChildrenElement{Dimension: dim, Report: []map[string]interface{}{}}
+		currentElement := child
+		creator.ReportElements = append(creator.ReportElements, currentElement)
 	}
 
-	counter, err := strconv.Atoi(counterStr)
-	if err != nil {
-		fmt.Println("Error converting counter to int:", err)
-		return
-	}
-	fmt.Println("Counter ", counter)
-	for i := 0; i <= counter; i++ {
-
-		istr := strconv.Itoa(i)
-		fmt.Println("Counter!! ", istr)
-		_, err = writer.WriteString("HGETS " + istr + "\n")
-		if err != nil {
-			fmt.Println("Error writing to server:", err)
-			return
-		}
-		writer.Flush()
-
-		dimensions, _ := reader.ReadString('\n')   // Чтение и отправка команды от пользователя
-		dimensions = strings.TrimSpace(dimensions) // Удаляем пробелы и символы новой строки
-
-		fmt.Println("dimensions:", dimensions)
-
-		// Чтение измерений из строки и разделение их по пробелу
-		dimensionsList := strings.Split(dimensions, " ")
-		// Создание экземпляра CreatorForJSON
-		creator := &CreatorForJSON{report: nil, deminsion: strings.Join(dimensionsList, " ")}
-
-		// Перебор измерений и добавление их в статистику
-		for _, dem := range dimensionsList {
-			// Пример: создание экземпляра ParentElement и добавление в статистику
-			parentElement := &ParentElement{
-				Id:           0, //
-				Pid:          nil,
-				URL:          nil,
-				SourceIP:     nil,
-				TimeInterval: nil,
-				Count:        0,
-				deminsion:    dem,
-				report:       nil,
+	// Получение порядка детализаций из запроса.
+	var detailsOrder []string
+	if details, ok := data["Details"].([]interface{}); ok {
+		for _, detail := range details {
+			if d, ok := detail.(string); ok {
+				detailsOrder = append(detailsOrder, d)
 			}
-
-			// добавление элемента в статистику через CreatorForJSON
-			creator.report = append(creator.report, parentElement)
-
 		}
-
-		// Создание отчета
-		stats := creator.createReport()
-
-		fmt.Println("Stats based on dimensions:", stats)
-
-	}
-	///////////////////
-	// Читаем данные из тела запроса
-	body, err := io.ReadAll(r.Body)
-	if err != nil {
-		http.Error(w, "Error reading request body", http.StatusInternalServerError)
-		return
 	}
 
-	// Декодируем JSON-данные
-	var stats []StatData
-	err = json.Unmarshal(body, &stats)
-	if err != nil {
-		http.Error(w, "Error decoding JSON data", http.StatusInternalServerError)
-		return
-	}
-
-	fmt.Println("Received stats:", stats)
-	// после формирования статистики, отправляем ее обратно тому, кто ее запрашивал
-	// Отправляем успешный ответ
-	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("Stats received successfully"))
+	// Создание отчета и отправка его в виде JSON-ответа.
+	report := creator.CreateReport(detailsOrder)
+	reportJSON, err := json.MarshalIndent(report, "", "  ")
+if err != nil {
+    http.Error(w, "Error formatting JSON", http.StatusInternalServerError)
+    return
+}
+w.Write(reportJSON)
 }
 
 func main() {
 	count = 0
-	// Настраиваем обработчик для POST-запросов по пути "/post"
 	http.HandleFunc("/post", handlePostRequest)
-	http.HandleFunc("/report", handleReport) // Добавляем обработчик для /report
-	// Запускаем веб-сервер на порту 8081
+	http.HandleFunc("/report", backStatistic)
 	err := http.ListenAndServe(":8081", nil)
 	if err != nil {
 		fmt.Println("Error starting server:", err)
