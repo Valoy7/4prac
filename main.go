@@ -46,49 +46,70 @@ type ParentElement struct {
 	report       []ReportElement
 }
 
+// addToReport добавляет статистический элемент в отчет (рекурсивно обрабатывает элементы дерева отчета).
+// Возвращает идентификатор нового или существующего элемента, который был добавлен в отчет.
 func (pe *ParentElement) addToReport(Pid int, currStats map[string]string) int {
+	// Извлекаем значение измерения текущего элемента
 	myStat := currStats[pe.deminsion]
+
+	// Итерируем по элементам отчета текущего уровня (родителя)
 	for _, i := range pe.report {
+		// Проверяем, является ли элемент типа *ParentElement и соответствует ли измерение
 		if val, ok := i.(*ParentElement); ok && val.deminsion == myStat {
+			// Увеличиваем счетчик и возвращаем идентификатор существующего элемента
 			val.Count++
 			return val.Id
 		}
 	}
 
+	// Создаем новый элемент отчета, так как элемент с заданным измерением не найден
 	newElement := &ParentElement{
 		Id:           len(pe.report),
-		Pid:          nil,
-		URL:          nil,
-		SourceIP:     nil,
-		TimeInterval: nil,
-		Count:        1,
-		deminsion:    myStat,
-		report:       nil,
+		Pid:          nil,    // Идентификатор родительского элемента (может потребоваться уточнение)
+		URL:          nil,    // Данные URL (добавьте реальные данные, если они есть)
+		SourceIP:     nil,    // Данные SourceIP (добавьте реальные данные, если они есть)
+		TimeInterval: nil,    // Данные TimeInterval (добавьте реальные данные, если они есть)
+		Count:        1,      // Устанавливаем начальное значение счетчика в 1
+		deminsion:    myStat, // Измерение текущего элемента
+		report:       nil,    // Инициализируйте его элементами отчета (возможно, потребуется уточнение)
 	}
+
+	// Добавляем новый элемент к отчету текущего родительского элемента
 	pe.report = append(pe.report, newElement)
+
+	// Возвращаем идентификатор нового элемента
 	return newElement.Id
 }
 
+// ChildrenElement - это элемент отчета, представляющий статистику с дополнительными измерениями.
 type ChildrenElement struct {
-	Id           int
-	Pid          interface{}
-	URL          interface{}
-	SourceIP     interface{}
-	TimeInterval interface{}
-	Count        int
-	deminsion    string
-	report       []ReportElement
+	Id           int             // Идентификатор элемента
+	Pid          interface{}     // Идентификатор родительского элемента
+	URL          interface{}     // Данные URL (добавьте реальные данные, если они есть)
+	SourceIP     interface{}     // Данные SourceIP (добавьте реальные данные, если они есть)
+	TimeInterval interface{}     // Данные TimeInterval (добавьте реальные данные, если они есть)
+	Count        int             // Счетчик элемента
+	deminsion    string          // Измерение текущего элемента
+	report       []ReportElement // Элементы отчета текущего элемента
 }
 
+// // addToReport - это метод типа дочернего элемента, который добавляет новый элемент отчета или увеличивает количество
+// существующего элемента на основе предоставленного Pid (родительского идентификатора) и текущей статистики.
+// Он возвращает идентификатор добавленного или обновленного элемента отчета.
 func (ce *ChildrenElement) addToReport(Pid int, currStats map[string]string) int {
+	// Извлеките значение измерения для текущего ChildrenElement из предоставленной статистики
 	myStat := currStats[ce.deminsion]
+
+	// Выполните итерацию по существующим элементам отчета, чтобы найти соответствие на основе измерения, Pid и утверждения типа
 	for _, i := range ce.report {
 		if val, ok := i.(*ChildrenElement); ok && val.deminsion == myStat && val.Pid == Pid {
+			// If a match is found, increment the count and return the ID of the matched element
 			val.Count++
 			return val.Id
 		}
 	}
 
+	// Если совпадение не найдено, создайте новый дочерний элемент и добавьте его в отчет
 	newElement := &ChildrenElement{
 		Id:           len(ce.report),
 		Pid:          Pid,
@@ -100,6 +121,8 @@ func (ce *ChildrenElement) addToReport(Pid int, currStats map[string]string) int
 		report:       nil, // You may need to initialize it depending on your use case
 	}
 	ce.report = append(ce.report, newElement)
+
+	// Возвращает идентификатор вновь добавленного элемента
 	return newElement.Id
 }
 
@@ -118,13 +141,15 @@ func (cfj *CreatorForJSON) createReport() []StatData {
 
 	// Итерация по элементам в отчете (cfj.report)
 	for _, element := range cfj.report {
+		fmt.Println("ya zdesya")
+		fmt.Println(" eto element: ", element)
 		// Проверяем, является ли элемент типа *ParentElement
 		if val, ok := element.(*ParentElement); ok {
 			// Создаем новую структуру StatData, используя данные из *ParentElement
 			statData := StatData{
 				ID:           val.Id,
-				URL:          nil, // 
-				SourceIP:     nil, // 
+				URL:          nil, //
+				SourceIP:     nil, //
 				TimeInterval: nil, //
 				Count:        val.Count,
 			}
@@ -143,9 +168,9 @@ func (cfj *CreatorForJSON) createReport() []StatData {
 			statData := StatData{
 				ID:           val.Id,
 				PID:          &pid,
-				URL:          nil, // 
-				SourceIP:     nil, // 
-				TimeInterval: nil, // 
+				URL:          nil, //
+				SourceIP:     nil, //
+				TimeInterval: nil, //
 				Count:        val.Count,
 			}
 			// Добавляем созданную структуру в массив result
@@ -251,7 +276,7 @@ func handleReport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	fmt.Println("Counter ", counter)
-	for i := 0; i < counter; i++ {
+	for i := 0; i <= counter; i++ {
 
 		istr := strconv.Itoa(i)
 		fmt.Println("Counter!! ", istr)
@@ -266,22 +291,11 @@ func handleReport(w http.ResponseWriter, r *http.Request) {
 		dimensions = strings.TrimSpace(dimensions) // Удаляем пробелы и символы новой строки
 
 		fmt.Println("dimensions:", dimensions)
-		// Преобразование JSON-строки в массив измерений
-		var dimensionsData map[string][]string
-		if err := json.Unmarshal([]byte(dimensions), &dimensionsData); err != nil {
-			fmt.Println("Error decoding dimensions JSON:", err)
-			return
-		}
 
-		// Получение измерений
-		dimensionsList, ok := dimensionsData["Dimensions"]
-		if !ok {
-			fmt.Println("Missing 'Dimensions' key in dimensions JSON")
-			return
-		}
-
+		// Чтение измерений из строки и разделение их по пробелу
+		dimensionsList := strings.Split(dimensions, " ")
 		// Создание экземпляра CreatorForJSON
-		creator := &CreatorForJSON{report: nil, deminsion: strings.Join(dimensionsList, "")}
+		creator := &CreatorForJSON{report: nil, deminsion: strings.Join(dimensionsList, " ")}
 
 		// Перебор измерений и добавление их в статистику
 		for _, dem := range dimensionsList {
@@ -294,21 +308,19 @@ func handleReport(w http.ResponseWriter, r *http.Request) {
 				TimeInterval: nil,
 				Count:        0,
 				deminsion:    dem,
-				report:       nil, 
+				report:       nil,
 			}
 
 			// добавление элемента в статистику через CreatorForJSON
 			creator.report = append(creator.report, parentElement)
 
-			
 		}
 
 		// Создание отчета
 		stats := creator.createReport()
 
-		
 		fmt.Println("Stats based on dimensions:", stats)
-		
+
 	}
 	///////////////////
 	// Читаем данные из тела запроса
@@ -326,7 +338,6 @@ func handleReport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	
 	fmt.Println("Received stats:", stats)
 	// после формирования статистики, отправляем ее обратно тому, кто ее запрашивал
 	// Отправляем успешный ответ
