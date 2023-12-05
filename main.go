@@ -28,57 +28,63 @@ type ReportElement interface {
 	AddToReport(PID int, currStats map[string]string) int
 	CreateReport(detailsOrder []string) []map[string]interface{}
 }
-
-// ParentElement представляет собой класс родительского элемента.
-type ParentElement struct {
+// BaseElement represents a common structure for both ParentElement and ChildrenElement.
+type BaseElement struct {
 	Dimension string
 	Report    []map[string]interface{}
 }
-// Init инициализирует родительский элемент перед обработкой данных из базы данных.
-func (pe *ParentElement) Init() {
-	pe.Report = nil
+
+// Init initializes the element before processing data from the database.
+func (be *BaseElement) Init() {
+	be.Report = nil
 }
-// AddToReport добавляет элемент в родительскую часть отчета.
-func (pe *ParentElement) AddToReport(PID int, currStats map[string]string) int {
-	fmt.Println("Мы в ce ParentElement) AddToReport ")
-	myStat := currStats[pe.Dimension]
-	for _, i := range pe.Report {
-		if val, ok := i[pe.Dimension].(string); ok && val == myStat {
+
+func (be *BaseElement) AddToReport(PID int, currStats map[string]string) int {
+	
+	myStat := currStats[be.Dimension]
+	fmt.Println("Adding to report! ",myStat )
+	for _, i := range be.Report {
+		if val, ok := i[be.Dimension].(string); ok && val == myStat {
 			i["Count"] = i["Count"].(int) + 1
 			return i["Id"].(int)
 		}
 	}
 	newElement := map[string]interface{}{
-		"Id":           len(pe.Report)+1,
+		"Id":           len(be.Report) + 1,
 		"Pid":          nil,
 		"URL":          nil,
 		"SourceIP":     nil,
 		"TimeInterval": nil,
 		"Count":        1,
 	}
-	newElement[pe.Dimension] = myStat
-	pe.Report = append(pe.Report, newElement)
+	newElement[be.Dimension] = myStat
+	be.Report = append(be.Report, newElement)
 	return newElement["Id"].(int)
 }
-
-// CreateReport создает отчет в формате JSON.
-func (pe *ParentElement) CreateReport(detailsOrder []string) []map[string]interface{} {
-	return pe.Report
+// CreateReport creates a report in JSON format.
+func (be *BaseElement) CreateReport(detailsOrder []string) []map[string]interface{} {
+	return be.Report
 }
-
-// ChildrenElement представляет собой класс дочернего элемента.
+// ParentElement представляет собой класс родительского элемента.
+type ParentElement struct {
+	BaseElement
+}
+func NewParentElement(dimension string) *ParentElement {
+	return &ParentElement{BaseElement: BaseElement{Dimension: dimension}}
+}
 type ChildrenElement struct {
-	Dimension string
-	Report    []map[string]interface{}
+	BaseElement
 }
-// Init инициализирует дочерний элемент перед обработкой данных из базы данных.
-func (ce *ChildrenElement) Init() {
-	ce.Report = nil
+// NewChildrenElement initializes a new instance of ChildrenElement.
+func NewChildrenElement(dimension string) *ChildrenElement {
+	return &ChildrenElement{BaseElement: BaseElement{Dimension: dimension}}
 }
+
 // AddToReport добавляет элемент в дочернюю часть отчета.
 func (ce *ChildrenElement) AddToReport(PID int, currStats map[string]string) int {
-	fmt.Println("Мы в ce *ChildrenElement) AddToReport:")
+	//fmt.Println("Мы в ce *ChildrenElement) AddToReport:")
 	myStat := currStats[ce.Dimension]
+	fmt.Println("Мы в ce *ChildrenElement) AddToReport ",myStat )
 	for _, i := range ce.Report {
 		if val, ok := i[ce.Dimension].(string); ok && val == myStat && i["Pid"].(int) == PID {
 			i["Count"] = i["Count"].(int) + 1
@@ -110,9 +116,8 @@ type CreatorForJSON struct {
 
 // NewCreatorForJSON initializes an instance of CreatorForJSON.
 func NewCreatorForJSON(dimension string) *CreatorForJSON {
-	fmt.Println("Мы в NewCreatorForJSON:")
 	creator := &CreatorForJSON{
-		ReportElements: []ReportElement{&ParentElement{Dimension: dimension}},
+		ReportElements: []ReportElement{NewParentElement(dimension)},
 	}
 	creator.Init()
 	return creator
@@ -124,10 +129,9 @@ func (c *CreatorForJSON) Init() {
 		element.Init()
 	}
 }
-
 // AddToReport adds an element to the report using the appropriate method.
 func (c *CreatorForJSON) AddToReport(PID int, currStats map[string]string) int {
-	fmt.Println("Мы в AddToReport:")
+	fmt.Println("Adding to report")
 	for _, element := range c.ReportElements {
 		PID = element.AddToReport(PID, currStats)
 	}
@@ -136,7 +140,7 @@ func (c *CreatorForJSON) AddToReport(PID int, currStats map[string]string) int {
 
 // CreateReport creates a JSON report.
 func (c *CreatorForJSON) CreateReport(detailsOrder []string) []map[string]interface{} {
-	fmt.Println("Мы в CreateReport:")
+	fmt.Println("Creating report")
 	countStr := askDBcount()
 	count, err := strconv.Atoi(countStr)
 	if err != nil {
@@ -162,6 +166,7 @@ func (c *CreatorForJSON) CreateReport(detailsOrder []string) []map[string]interf
 
 	return report
 }
+
 
 // askDBcount - функция для выполнения запросов к базе данных для получения счетчика.
 func askDBcount() string {
@@ -332,7 +337,7 @@ func backStatistic(w http.ResponseWriter, r *http.Request) {
 	// Создание дочерних элементов для оставшихся измерений.
 	//var currentElement ReportElement = creator
 	for _, dim := range dimensions[1:] {
-		child := &ChildrenElement{Dimension: dim, Report: []map[string]interface{}{}}
+		child := &ChildrenElement{BaseElement: BaseElement{Dimension: dim, Report: make([]map[string]interface{}, 0)}}
 		currentElement := child
 		creator.ReportElements = append(creator.ReportElements, currentElement)
 	}
