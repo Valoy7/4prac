@@ -12,7 +12,7 @@ import (
 )
 
 var count int
-var report []map[string]interface{}
+
 // ServerDisconnectedError описывает ошибку отключения сервера.
 type ServerDisconnectedError struct {
 	message string
@@ -32,22 +32,24 @@ type ReportElement interface {
 // ParentElement представляет собой класс родительского элемента.
 type ParentElement struct {
 	Dimension string
+	Report    []map[string]interface{}
 }
-
-func (pe *ParentElement) Init() {}
-
+// Init инициализирует родительский элемент перед обработкой данных из базы данных.
+func (pe *ParentElement) Init() {
+	pe.Report = nil
+}
+// AddToReport добавляет элемент в родительскую часть отчета.
 func (pe *ParentElement) AddToReport(PID int, currStats map[string]string) int {
+	fmt.Println("Мы в ce ParentElement) AddToReport ")
 	myStat := currStats[pe.Dimension]
-	for _, i := range report {
+	for _, i := range pe.Report {
 		if val, ok := i[pe.Dimension].(string); ok && val == myStat {
 			i["Count"] = i["Count"].(int) + 1
 			return i["Id"].(int)
 		}
 	}
-	leng := len(report)
-	fmt.Println("Len reportov Parent: ", leng)
 	newElement := map[string]interface{}{
-		"Id":           len(report) + 1, // Adjust the initialization of Id
+		"Id":           len(pe.Report)+1,
 		"Pid":          nil,
 		"URL":          nil,
 		"SourceIP":     nil,
@@ -55,33 +57,36 @@ func (pe *ParentElement) AddToReport(PID int, currStats map[string]string) int {
 		"Count":        1,
 	}
 	newElement[pe.Dimension] = myStat
-	report = append(report, newElement)
+	pe.Report = append(pe.Report, newElement)
 	return newElement["Id"].(int)
 }
 
+// CreateReport создает отчет в формате JSON.
 func (pe *ParentElement) CreateReport(detailsOrder []string) []map[string]interface{} {
-	return report
+	return pe.Report
 }
 
 // ChildrenElement представляет собой класс дочернего элемента.
 type ChildrenElement struct {
 	Dimension string
+	Report    []map[string]interface{}
 }
-
-func (ce *ChildrenElement) Init() {}
-
+// Init инициализирует дочерний элемент перед обработкой данных из базы данных.
+func (ce *ChildrenElement) Init() {
+	ce.Report = nil
+}
+// AddToReport добавляет элемент в дочернюю часть отчета.
 func (ce *ChildrenElement) AddToReport(PID int, currStats map[string]string) int {
+	fmt.Println("Мы в ce *ChildrenElement) AddToReport:")
 	myStat := currStats[ce.Dimension]
-	for _, i := range report {
+	for _, i := range ce.Report {
 		if val, ok := i[ce.Dimension].(string); ok && val == myStat && i["Pid"].(int) == PID {
 			i["Count"] = i["Count"].(int) + 1
 			return i["Id"].(int)
 		}
 	}
-	leng := len(report)
-	fmt.Println("Len reportov child: ", leng)
 	newElement := map[string]interface{}{
-		"Id":           len(report) + 1, // Adjust the initialization of Id
+		"Id":           len(ce.Report)+1,
 		"Pid":          PID,
 		"URL":          nil,
 		"SourceIP":     nil,
@@ -89,45 +94,47 @@ func (ce *ChildrenElement) AddToReport(PID int, currStats map[string]string) int
 		"Count":        1,
 	}
 	newElement[ce.Dimension] = myStat
-	report = append(report, newElement)
+	ce.Report = append(ce.Report, newElement)
 	return newElement["Id"].(int)
 }
 
+// CreateReport создает отчет в формате JSON.
 func (ce *ChildrenElement) CreateReport(detailsOrder []string) []map[string]interface{} {
-	return report
+	return ce.Report
 }
 
 // CreatorForJSON представляет собой класс создателя отчетов в формате JSON.
 type CreatorForJSON struct {
-	Report         []map[string]interface{}
 	ReportElements []ReportElement
 }
 
+// NewCreatorForJSON initializes an instance of CreatorForJSON.
 func NewCreatorForJSON(dimension string) *CreatorForJSON {
 	fmt.Println("Мы в NewCreatorForJSON:")
 	creator := &CreatorForJSON{
-		Report:         []map[string]interface{}{},
 		ReportElements: []ReportElement{&ParentElement{Dimension: dimension}},
 	}
 	creator.Init()
 	return creator
 }
 
+// Init initializes CreatorForJSON before processing data from the database.
 func (c *CreatorForJSON) Init() {
 	for _, element := range c.ReportElements {
 		element.Init()
 	}
 }
 
+// AddToReport adds an element to the report using the appropriate method.
 func (c *CreatorForJSON) AddToReport(PID int, currStats map[string]string) int {
 	fmt.Println("Мы в AddToReport:")
 	for _, element := range c.ReportElements {
 		PID = element.AddToReport(PID, currStats)
 	}
-
 	return PID
 }
 
+// CreateReport creates a JSON report.
 func (c *CreatorForJSON) CreateReport(detailsOrder []string) []map[string]interface{} {
 	fmt.Println("Мы в CreateReport:")
 	countStr := askDBcount()
@@ -137,7 +144,7 @@ func (c *CreatorForJSON) CreateReport(detailsOrder []string) []map[string]interf
 		return nil
 	}
 
-	c.Report = nil
+	c.Init()
 
 	for i := 0; i <= count; i++ {
 		data := askDB(strconv.Itoa(i))
@@ -147,6 +154,7 @@ func (c *CreatorForJSON) CreateReport(detailsOrder []string) []map[string]interf
 		fmt.Println("pid у нас: ", PID)
 	}
 
+	// Assuming that the first element is a ParentElement
 	var report []map[string]interface{}
 	for _, element := range c.ReportElements {
 		report = append(report, element.CreateReport(detailsOrder)...)
@@ -155,6 +163,7 @@ func (c *CreatorForJSON) CreateReport(detailsOrder []string) []map[string]interf
 	return report
 }
 
+// askDBcount - функция для выполнения запросов к базе данных для получения счетчика.
 func askDBcount() string {
 	conn, err := net.Dial("tcp", "localhost:6379")
 	if err != nil {
@@ -187,6 +196,7 @@ func askDBcount() string {
 	return counterStr
 }
 
+// askDB - функция для выполнения запросов к базе данных.
 func askDB(istr string) []string {
 	conn, err := net.Dial("tcp", "localhost:6379")
 	if err != nil {
@@ -212,6 +222,8 @@ func askDB(istr string) []string {
 	}
 
 	dimensions = strings.TrimSpace(dimensions)
+
+	// Разделение измерений по пробелу
 	dimensionsList := strings.Split(dimensions, " ")
 
 	return dimensionsList
@@ -240,6 +252,7 @@ func handlePostRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Чтение данных из тела запроса
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		http.Error(w, "Error reading request body", http.StatusInternalServerError)
@@ -267,47 +280,64 @@ func handlePostRequest(w http.ResponseWriter, r *http.Request) {
 		defer resp.Body.Close()
 	}
 
+	// Вывод полученных данных
 	fmt.Println("Received data:", string(body))
+
+	// Отправка успешного ответа
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("POST request received successfully"))
 }
 
+// backStatistic обрабатывает HTTP-запрос и создает статистический отчет на основе полученных данных.
 func backStatistic(w http.ResponseWriter, r *http.Request) {
+	// Выводит в консоль сообщение для отладки, указывающее, что функция была вызвана.
 	fmt.Println("ya tut")
 
+	// Создание декодера JSON для чтения данных из тела запроса.
 	decoder := json.NewDecoder(r.Body)
 	var data map[string]interface{}
 	err := decoder.Decode(&data)
 	if err != nil {
+		// В случае ошибки при декодировании JSON, отправляет HTTP-ответ с кодом ошибки и сообщением.
 		http.Error(w, "Invalid JSON format", http.StatusBadRequest)
 		return
 	}
 
+	// Проверка наличия ключа "Dimensions" в данных и его приведение к массиву интерфейсов.
 	dimensionsArray, ok := data["Dimensions"].([]interface{})
 	if !ok {
+		// Если ключ "Dimensions" отсутствует или имеет неверный формат, отправляет HTTP-ответ с ошибкой.
 		http.Error(w, "Invalid Dimensions format", http.StatusBadRequest)
 		return
 	}
 
+	// Создание среза строк для хранения измерений.
 	dimensions := make([]string, len(dimensionsArray))
 	for i, v := range dimensionsArray {
+		// Приведение каждого измерения к строковому типу.
 		s, ok := v.(string)
 		if !ok {
+			// Если приведение не удалось, отправляет HTTP-ответ с ошибкой.
 			http.Error(w, "Invalid Dimension format", http.StatusBadRequest)
 			return
 		}
+		// Запись измерения в срез dimensions.
 		dimensions[i] = s
-		fmt.Println("dimensions[i] = s: ", dimensions[i])
+		fmt.Println("dimensions[i] = s: ", dimensions[i]) // Выводит в консоль текущее измерение для отладки.
 	}
 
+	// Создание первого элемента отчета с использованием NewCreatorForJSON.
 	creator := NewCreatorForJSON(dimensions[0])
 
+	// Создание дочерних элементов для оставшихся измерений.
+	//var currentElement ReportElement = creator
 	for _, dim := range dimensions[1:] {
-		child := &ChildrenElement{Dimension: dim}
-		var currentElement ReportElement = child
+		child := &ChildrenElement{Dimension: dim, Report: []map[string]interface{}{}}
+		currentElement := child
 		creator.ReportElements = append(creator.ReportElements, currentElement)
 	}
 
+	// Получение порядка детализаций из запроса.
 	var detailsOrder []string
 	if details, ok := data["Details"].([]interface{}); ok {
 		for _, detail := range details {
@@ -317,13 +347,14 @@ func backStatistic(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Создание отчета и отправка его в виде JSON-ответа.
 	report := creator.CreateReport(detailsOrder)
 	reportJSON, err := json.MarshalIndent(report, "", "  ")
-	if err != nil {
-		http.Error(w, "Error formatting JSON", http.StatusInternalServerError)
-		return
-	}
-	w.Write(reportJSON)
+if err != nil {
+    http.Error(w, "Error formatting JSON", http.StatusInternalServerError)
+    return
+}
+w.Write(reportJSON)
 }
 
 func main() {
