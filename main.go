@@ -31,14 +31,13 @@ type ReportElement interface {
 	CreateReport(detailsOrder []string) []map[string]interface{}
 }
 
-// BaseElement represents a common structure for both ParentElement and ChildrenElement.
 type BaseElement struct {
 	Dimension string
 	Report    []map[string]interface{}
 	IdCounter int
 }
 
-// Init initializes the element before processing data from the database.
+// Init инициализирует элемент перед обработкой данных из базы данных
 func (be *BaseElement) Init() {
 	be.Report = nil
 	be.IdCounter = 1
@@ -62,13 +61,13 @@ func (be *BaseElement) AddToReport(PID int, currStats map[string]string) int {
 		"Count":        1,
 	}
 	ID++
-	
+
 	newElement[be.Dimension] = myStat
 	be.Report = append(be.Report, newElement)
 	return newElement["Id"].(int)
 }
 
-// CreateReport creates a report in JSON format.
+// CreateReport создает репорт в JSON формате.
 func (be *BaseElement) CreateReport(detailsOrder []string) []map[string]interface{} {
 	for _, i := range be.Report {
 		i["Id"] = i["Id"].(int)
@@ -91,9 +90,9 @@ type ChildrenElement struct {
 
 // AddToReport добавляет элемент в дочернюю часть отчета.
 func (ce *ChildrenElement) AddToReport(PID int, currStats map[string]string) int {
-	//fmt.Println("Мы в ce *ChildrenElement) AddToReport:")
+
 	myStat := currStats[ce.Dimension]
-	
+
 	for _, i := range ce.Report {
 		if val, ok := i[ce.Dimension].(string); ok && val == myStat && i["Pid"].(int) == PID {
 			i["Count"] = i["Count"].(int) + 1
@@ -121,7 +120,7 @@ type CreatorForJSON struct {
 	ReportElements []ReportElement
 }
 
-// NewCreatorForJSON initializes an instance of CreatorForJSON.
+// NewCreatorForJSON инициализирует экземпляр Creator для JSON.
 func NewCreatorForJSON(dimension string) *CreatorForJSON {
 	creator := &CreatorForJSON{
 		ReportElements: []ReportElement{NewParentElement(dimension)},
@@ -146,7 +145,7 @@ func (c *CreatorForJSON) AddToReport(PID int, currStats map[string]string) int {
 	return PID
 }
 
-// CreateReport creates a JSON report.
+// CreateReport создает JSON отче.
 func (c *CreatorForJSON) CreateReport(detailsOrder []string) []map[string]interface{} {
 	fmt.Println("Creating report")
 	countStr := askDBcount()
@@ -166,7 +165,6 @@ func (c *CreatorForJSON) CreateReport(detailsOrder []string) []map[string]interf
 		fmt.Println("pid: ", PID)
 	}
 
-	// Assuming that the first element is a ParentElement
 	var report []map[string]interface{}
 	for _, element := range c.ReportElements {
 		report = append(report, element.CreateReport(detailsOrder)...)
@@ -276,6 +274,44 @@ func handleReadError(err error) {
 	fmt.Println("Error reading from server:", err)
 }
 
+func askDBper(body string) string {
+	conn, err := net.Dial("tcp", "localhost:6379")
+	if err != nil {
+		handleConnectionError(err)
+		return ""
+	}
+	defer conn.Close()
+
+	writer := bufio.NewWriter(conn)
+
+	countStr := strconv.Itoa(count)
+	if count == 0 {
+		dimensions := strings.Join([]string{countStr, string(body)}, " ")
+		fmt.Println("dimensions tut: ", dimensions)
+		_, err = writer.WriteString("HGETSDEM" +" "+ dimensions + "\n")
+		if err != nil {
+			handleWriteError(err)
+			return ""
+		}
+
+		writer.Flush()
+		count++
+
+	} else {
+		dimensions := strings.Join([]string{countStr, string(body)}, " ")
+		fmt.Println("dimensions tut: ", dimensions)
+		_, err = writer.WriteString("HGETSDEM" +" "+ dimensions + "\n")
+		if err != nil {
+			handleWriteError(err)
+			return ""
+		}
+		writer.Flush()
+		count++
+
+	}
+	return ""
+}
+
 func handlePostRequest(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -288,34 +324,11 @@ func handlePostRequest(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Error reading request body", http.StatusInternalServerError)
 		return
 	}
-
-	countStr := strconv.Itoa(count)
-	if count == 0 {
-		dimensions := strings.Join([]string{countStr, string(body)}, " ")
-		resp, err := http.Post("http://localhost:8082/post", "text/plain", strings.NewReader(dimensions))
-		if err != nil {
-			fmt.Println("Error sending POST request to the second server:", err)
-			return
-		}
-		count++
-		defer resp.Body.Close()
-	} else {
-		dimensions := strings.Join([]string{countStr, string(body)}, " ")
-		resp, err := http.Post("http://localhost:8082/post", "text/plain", strings.NewReader(dimensions))
-		if err != nil {
-			fmt.Println("Error sending POST request to the second server:", err)
-			return
-		}
-		count++
-		defer resp.Body.Close()
-	}
+	askDBper(string(body))
 
 	// Вывод полученных данных
 	fmt.Println("Received data:", string(body))
 
-	// Отправка успешного ответа
-	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("POST request received successfully"))
 }
 
 // backStatistic обрабатывает HTTP-запрос и создает статистический отчет на основе полученных данных.
@@ -358,7 +371,7 @@ func backStatistic(w http.ResponseWriter, r *http.Request) {
 	creator := NewCreatorForJSON(dimensions[0])
 
 	// Создание дочерних элементов для оставшихся измерений.
-	//var currentElement ReportElement = creator
+
 	for _, dim := range dimensions[1:] {
 		child := &ChildrenElement{BaseElement: BaseElement{Dimension: dim, Report: make([]map[string]interface{}, 0)}}
 		currentElement := child
